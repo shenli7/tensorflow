@@ -93,8 +93,7 @@ class SparseTensor(_TensorLike):
 
   @classmethod
   def from_value(cls, sparse_tensor_value):
-    if not (isinstance(sparse_tensor_value, SparseTensor) or
-            isinstance(sparse_tensor_value, SparseTensorValue)):
+    if not is_sparse(sparse_tensor_value):
       raise TypeError("Neither a SparseTensor nor SparseTensorValue: %s." %
                       sparse_tensor_value)
     return SparseTensor(
@@ -203,7 +202,7 @@ class SparseTensor(_TensorLike):
 
     Args:
       feed_dict: A dictionary that maps `Tensor` objects to feed values.
-        See [`Session.run()`](../../api_docs/python/client.md#Session.run) for a
+        See @{tf.Session.run} for a
         description of the valid feed values.
       session: (Optional.) The `Session` to be used to evaluate this sparse
         tensor. If none, the default session will be used.
@@ -253,3 +252,17 @@ def convert_to_tensor_or_sparse_tensor(value, dtype=None, name=None):
     return value
   return ops.internal_convert_to_tensor(
       value, dtype=dtype, name=name)
+
+
+def is_sparse(x):
+  """Check whether `x` is sparse.
+
+  Check whether an object is a `tf.SparseTensor` or `tf.SparseTensorValue`.
+
+  Args:
+    x: A python object to check.
+
+  Returns:
+    `True` iff `x` is a `tf.SparseTensor` or `tf.SparseTensorValue`.
+  """
+  return isinstance(x, (SparseTensor, SparseTensorValue))

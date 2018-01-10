@@ -12,8 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
+"""Utilities for creating input_fns.
 
-"""Utilities for creating input_fns."""
+Contents of this file are moved to tensorflow/python/estimator/export.py.
+InputFnOps is renamed to ServingInputReceiver.
+build_parsing_serving_input_fn is renamed to
+  build_parsing_serving_input_receiver_fn.
+build_default_serving_input_fn is renamed to
+  build_raw_serving_input_receiver_fn.
+"""
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -99,9 +107,8 @@ def build_default_serving_input_fn(features, default_batch_size=None):
       shape_list[0] = default_batch_size
       shape = tensor_shape.TensorShape(shape_list)
 
-      features_placeholders[name] = array_ops.placeholder(dtype=t.dtype,
-                                                          shape=shape,
-                                                          name=t.name)
+      features_placeholders[name] = array_ops.placeholder(
+          dtype=t.dtype, shape=shape, name=t.op.name)
     labels = None  # these are not known in serving!
     return InputFnOps(features_placeholders, labels, features_placeholders)
   return input_fn

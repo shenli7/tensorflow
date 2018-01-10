@@ -19,20 +19,11 @@ from __future__ import division
 from __future__ import print_function
 
 import functools
-import sys
 import tempfile
-
-# pylint: disable=g-bad-todo
-# TODO(#6568): Remove this hack that makes dlopen() not crash.
-# pylint: enable=g-bad-todo
-# pylint: disable=g-import-not-at-top
-if hasattr(sys, 'getdlopenflags') and hasattr(sys, 'setdlopenflags'):
-  import ctypes
-  sys.setdlopenflags(sys.getdlopenflags() | ctypes.RTLD_GLOBAL)
 
 import numpy as np
 
-from tensorflow.contrib.framework.python.ops import variables
+from tensorflow.python.training import training_util
 from tensorflow.contrib.layers.python.layers import optimizers
 from tensorflow.contrib.learn.python.learn import metric_spec
 from tensorflow.contrib.learn.python.learn import models
@@ -123,7 +114,7 @@ def linear_model_params_fn(features, labels, mode, params):
   prediction, loss = (models.linear_regression_zero_init(features, labels))
   train_op = optimizers.optimize_loss(
       loss,
-      variables.get_global_step(),
+      training_util.get_global_step(),
       optimizer='Adagrad',
       learning_rate=params['learning_rate'])
   return prediction, loss, train_op
@@ -138,7 +129,7 @@ def linear_model_fn(features, labels, mode):
     (_, features), = features.items()
   prediction, loss = (models.linear_regression_zero_init(features, labels))
   train_op = optimizers.optimize_loss(
-      loss, variables.get_global_step(), optimizer='Adagrad', learning_rate=0.1)
+      loss, training_util.get_global_step(), optimizer='Adagrad', learning_rate=0.1)
   return prediction, loss, train_op
 
 
@@ -148,7 +139,7 @@ def linear_model_fn_with_model_fn_ops(features, labels, mode):
                   model_fn.ModeKeys.INFER)
   prediction, loss = (models.linear_regression_zero_init(features, labels))
   train_op = optimizers.optimize_loss(
-      loss, variables.get_global_step(), optimizer='Adagrad', learning_rate=0.1)
+      loss, training_util.get_global_step(), optimizer='Adagrad', learning_rate=0.1)
   return model_fn.ModelFnOps(
       mode=mode, predictions=prediction, loss=loss, train_op=train_op)
 
@@ -159,7 +150,7 @@ def logistic_model_no_mode_fn(features, labels):
   labels = array_ops.one_hot(labels, 3, 1, 0)
   prediction, loss = (models.logistic_regression_zero_init(features, labels))
   train_op = optimizers.optimize_loss(
-      loss, variables.get_global_step(), optimizer='Adagrad', learning_rate=0.1)
+      loss, training_util.get_global_step(), optimizer='Adagrad', learning_rate=0.1)
   return {
       'class': math_ops.argmax(prediction, 1),
       'prob': prediction

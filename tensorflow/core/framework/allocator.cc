@@ -15,6 +15,7 @@ limitations under the License.
 
 #include "tensorflow/core/framework/allocator.h"
 
+#include "tensorflow/core/framework/allocator_registry.h"
 #include "tensorflow/core/framework/log_memory.h"
 #include "tensorflow/core/framework/tracking_allocator.h"
 #include "tensorflow/core/lib/strings/stringprintf.h"
@@ -46,6 +47,14 @@ string AllocatorStats::DebugString() const {
 constexpr size_t Allocator::kAllocatorAlignment;
 
 Allocator::~Allocator() {}
+
+void RunResourceCtor(ResourceHandle* p, size_t n) {
+  for (size_t i = 0; i < n; ++p, ++i) new (p) ResourceHandle();
+}
+
+void RunResourceDtor(ResourceHandle* p, size_t n) {
+  for (size_t i = 0; i < n; ++p, ++i) p->~ResourceHandle();
+}
 
 // If true, cpu allocator collects more stats.
 static bool cpu_allocator_collect_stats = false;
@@ -97,6 +106,13 @@ class CPUAllocator : public Allocator {
     *stats = stats_;
   }
 
+  void ClearStats() override {
+    mutex_lock l(mu_);
+    stats_.num_allocs = 0;
+    stats_.max_bytes_in_use = stats_.bytes_in_use;
+    stats_.max_alloc_size = 0;
+  }
+
   size_t AllocatedSizeSlow(void* ptr) override {
     return port::MallocExtension_GetAllocatedSize(ptr);
   }
@@ -108,22 +124,14 @@ class CPUAllocator : public Allocator {
   TF_DISALLOW_COPY_AND_ASSIGN(CPUAllocator);
 };
 
-namespace {
-Allocator* MakeCpuAllocator() {
-  Allocator* allocator = new CPUAllocator;
-  if (cpu_allocator_collect_full_stats || LogMemory::IsEnabled()) {
-    allocator = new TrackingAllocator(allocator, true);
-  }
-  return allocator;
-}
-}  // namespace
-
 Allocator* cpu_allocator() {
-  static Allocator* cpu_alloc = MakeCpuAllocator();
+  static Allocator* cpu_alloc = AllocatorRegistry::Global()->GetAllocator();
   if (cpu_allocator_collect_full_stats && !cpu_alloc->TracksAllocationSizes()) {
     cpu_alloc = new TrackingAllocator(cpu_alloc, true);
   }
   return cpu_alloc;
 }
+
+REGISTER_MEM_ALLOCATOR("DefaultCPUAllocator", 100, CPUAllocator);
 
 }  // namespace tensorflow

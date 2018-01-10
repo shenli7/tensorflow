@@ -52,6 +52,15 @@ class GemmThunk : public Thunk {
       const BufferAllocations& buffer_allocations,
       perftools::gputools::Stream* stream) override;
 
+  // Returns true if we'll perform autotuning if run on the given stream.  If
+  // so, we want the GPU to be quiescent during autotuning, so as not to
+  // introduce noise in our results.
+  bool ShouldHaltAllActivityBeforeRunning(
+      perftools::gputools::Stream* stream) override {
+    return autotune_results_.count(
+               stream->parent()->GetDeviceDescription().name()) != 0;
+  }
+
  private:
   const BufferAllocation::Slice lhs_buffer_;
   const BufferAllocation::Slice rhs_buffer_;
@@ -63,6 +72,14 @@ class GemmThunk : public Thunk {
 
   const bool transpose_lhs_;
   const bool transpose_rhs_;
+
+  // Maps device names (StreamExecutor::DeviceDescription::name()) to autotune
+  // results.  The map's value is the best algorithm we've found for this thunk
+  // on this device, or an error if none of the algorithms worked and we should
+  // use the regular gemm without an algorithm.
+  std::unordered_map<string,
+                     StatusOr<::perftools::gputools::blas::AlgorithmType>>
+      autotune_results_;
 };
 
 }  // namespace gpu

@@ -86,6 +86,9 @@ class MovingAverageOptimizer(optimizer.Optimizer):
     self._variable_map = None
     self._sequential_update = sequential_update
 
+  def compute_gradients(self, *args, **kwargs):
+    return self._optimizer.compute_gradients(*args, **kwargs)
+
   def apply_gradients(self, grads_and_vars, global_step=None, name=None):
     train_op = self._optimizer.apply_gradients(
         grads_and_vars, global_step=global_step, name=name)
@@ -122,7 +125,7 @@ class MovingAverageOptimizer(optimizer.Optimizer):
       **kwargs: Keyword arguments of `Saver()`.
 
     Returns:
-      A `tf.Saver` object.
+      A `tf.train.Saver` object.
 
     Raises:
       RuntimeError: If apply_gradients or minimize has not been called before.

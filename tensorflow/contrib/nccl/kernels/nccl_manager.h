@@ -20,7 +20,7 @@ limitations under the License.
 #include <unordered_map>
 #include <vector>
 
-#include "external/nccl_archive/src/nccl.h"
+#include "src/nccl.h"
 #include "tensorflow/core/common_runtime/gpu/gpu_event_mgr.h"
 #include "tensorflow/core/framework/tensor.h"
 #include "tensorflow/core/platform/mutex.h"
@@ -57,7 +57,7 @@ class NcclManager {
   void AddToAllReduce(int num_devices, const string& key,
                       ncclRedOp_t reduction_op,
                       perftools::gputools::StreamExecutor* executor,
-                      EventMgr* event_mgr,
+                      int gpu_device_id, EventMgr* event_mgr,
                       perftools::gputools::Stream* tensor_stream,
                       const Tensor* in_t, Tensor* out_t,
                       const DoneCallback& done_callback);
@@ -66,19 +66,36 @@ class NcclManager {
   // to all receivers.
   void AddBroadcastSend(int num_devices, const string& key,
                         perftools::gputools::StreamExecutor* executor,
-                        EventMgr* event_mgr,
+                        int gpu_device_id, EventMgr* event_mgr,
                         perftools::gputools::Stream* tensor_stream,
                         const Tensor* in_t, DoneCallback done_callback);
   void AddBroadcastRecv(int num_devices, const string& key,
                         perftools::gputools::StreamExecutor* executor,
-                        EventMgr* event_mgr,
+                        int gpu_device_id, EventMgr* event_mgr,
                         perftools::gputools::Stream* tensor_stream,
                         Tensor* out_t, DoneCallback done_callback);
+
+  // AddReduceSend and AddReduceRecv combine to sent data from all senders
+  // to one receiver.
+  void AddReduceSend(int num_devices, const string& key,
+                     ncclRedOp_t reduction_op,
+                     perftools::gputools::StreamExecutor* executor,
+                     int gpu_device_id, EventMgr* event_mgr,
+                     perftools::gputools::Stream* tensor_stream,
+                     const Tensor* in_t, DoneCallback done_callback);
+  void AddReduceRecv(int num_devices, const string& key,
+                     ncclRedOp_t reduction_op,
+                     perftools::gputools::StreamExecutor* executor,
+                     int gpu_device_id, EventMgr* event_mgr,
+                     perftools::gputools::Stream* tensor_stream,
+                     const Tensor* in_t, Tensor* out_t,
+                     DoneCallback done_callback);
 
  private:
   enum CollectiveType {
     kAllReduce = 1,
     kBroadcast = 2,
+    kReduce = 3,
   };
   struct Collective;
   struct Communicator;

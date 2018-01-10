@@ -17,6 +17,7 @@
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
+
 import argparse
 import ast
 import collections
@@ -28,170 +29,26 @@ import traceback
 
 
 class APIChangeSpec(object):
-  """List of maps that describe what changed in the API."""
+  """This class defines the transformations that need to happen.
 
-  def __init__(self):
-    # Maps from a function name to a dictionary that describes how to
-    # map from an old argument keyword to the new argument keyword.
-    self.function_keyword_renames = {
-        "tf.count_nonzero": {
-            "reduction_indices": "axis"
-        },
-        "tf.reduce_all": {
-            "reduction_indices": "axis"
-        },
-        "tf.reduce_any": {
-            "reduction_indices": "axis"
-        },
-        "tf.reduce_max": {
-            "reduction_indices": "axis"
-        },
-        "tf.reduce_mean": {
-            "reduction_indices": "axis"
-        },
-        "tf.reduce_min": {
-            "reduction_indices": "axis"
-        },
-        "tf.reduce_prod": {
-            "reduction_indices": "axis"
-        },
-        "tf.reduce_sum": {
-            "reduction_indices": "axis"
-        },
-        "tf.reduce_logsumexp": {
-            "reduction_indices": "axis"
-        },
-        "tf.expand_dims": {
-            "dim": "axis"
-        },
-        "tf.argmax": {
-            "dimension": "axis"
-        },
-        "tf.argmin": {
-            "dimension": "axis"
-        },
-        "tf.reduce_join": {
-            "reduction_indices": "axis"
-        },
-        "tf.sparse_concat": {
-            "concat_dim": "axis"
-        },
-        "tf.sparse_split": {
-            "split_dim": "axis"
-        },
-        "tf.sparse_reduce_sum": {
-            "reduction_axes": "axis"
-        },
-        "tf.reverse_sequence": {
-            "seq_dim": "seq_axis",
-            "batch_dim": "batch_axis"
-        },
-        "tf.sparse_reduce_sum_sparse": {
-            "reduction_axes": "axis"
-        },
-        "tf.squeeze": {
-            "squeeze_dims": "axis"
-        },
-        "tf.split": {
-            "split_dim": "axis",
-            "num_split": "num_or_size_splits"
-        },
-        "tf.concat": {
-            "concat_dim": "axis"
-        },
-    }
+  This class must provide the following fields:
 
-    # Mapping from function to the new name of the function
-    self.function_renames = {
-        "tf.inv": "tf.reciprocal",
-        "tf.contrib.deprecated.scalar_summary": "tf.summary.scalar",
-        "tf.contrib.deprecated.histogram_summary": "tf.summary.histogram",
-        "tf.listdiff": "tf.setdiff1d",
-        "tf.list_diff": "tf.setdiff1d",
-        "tf.mul": "tf.multiply",
-        "tf.neg": "tf.negative",
-        "tf.sub": "tf.subtract",
-        "tf.train.SummaryWriter": "tf.summary.FileWriter",
-        "tf.scalar_summary": "tf.summary.scalar",
-        "tf.histogram_summary": "tf.summary.histogram",
-        "tf.audio_summary": "tf.summary.audio",
-        "tf.image_summary": "tf.summary.image",
-        "tf.merge_summary": "tf.summary.merge",
-        "tf.merge_all_summaries": "tf.summary.merge_all",
-        "tf.image.per_image_whitening": "tf.image.per_image_standardization",
-        "tf.all_variables": "tf.global_variables",
-        "tf.VARIABLES": "tf.GLOBAL_VARIABLES",
-        "tf.initialize_all_variables": "tf.global_variables_initializer",
-        "tf.initialize_variables": "tf.variables_initializer",
-        "tf.initialize_local_variables": "tf.local_variables_initializer",
-        "tf.batch_matrix_diag": "tf.matrix_diag",
-        "tf.batch_band_part": "tf.band_part",
-        "tf.batch_set_diag": "tf.set_diag",
-        "tf.batch_matrix_transpose": "tf.matrix_transpose",
-        "tf.batch_matrix_determinant": "tf.matrix_determinant",
-        "tf.batch_matrix_inverse": "tf.matrix_inverse",
-        "tf.batch_cholesky": "tf.cholesky",
-        "tf.batch_cholesky_solve": "tf.cholesky_solve",
-        "tf.batch_matrix_solve": "tf.matrix_solve",
-        "tf.batch_matrix_triangular_solve": "tf.matrix_triangular_solve",
-        "tf.batch_matrix_solve_ls": "tf.matrix_solve_ls",
-        "tf.batch_self_adjoint_eig": "tf.self_adjoint_eig",
-        "tf.batch_self_adjoint_eigvals": "tf.self_adjoint_eigvals",
-        "tf.batch_svd": "tf.svd",
-        "tf.batch_fft": "tf.fft",
-        "tf.batch_ifft": "tf.ifft",
-        "tf.batch_ifft2d": "tf.ifft2d",
-        "tf.batch_fft3d": "tf.fft3d",
-        "tf.batch_ifft3d": "tf.ifft3d",
-        "tf.select": "tf.where",
-        "tf.complex_abs": "tf.abs",
-        "tf.batch_matmul": "tf.matmul",
-        "tf.pack": "tf.stack",
-        "tf.unpack": "tf.unstack",
-    }
+  * `function_keyword_renames`: maps function names to a map of old -> new
+    argument names
+  * `function_renames`: maps function names to new function names
+  * `change_to_function`: a set of function names that have changed (for
+    notifications)
+  * `function_reorders`: maps functions whose argument order has changed to the
+    list of arguments in the new order
+  * `function_handle`: maps function names to custom handlers for the function
 
-    self.change_to_function = {
-        "tf.ones_initializer",
-        "tf.zeros_initializer",
-    }
-
-    # Functions that were reordered should be changed to the new keyword args
-    # for safety, if positional arguments are used. If you have reversed the
-    # positional arguments yourself, this could do the wrong thing.
-    self.function_reorders = {
-        "tf.split": ["axis", "num_or_size_splits", "value", "name"],
-        "tf.sparse_split": ["axis", "num_or_size_splits", "value", "name"],
-        "tf.concat": ["concat_dim", "values", "name"],
-        "tf.svd": ["tensor", "compute_uv", "full_matrices", "name"],
-        "tf.nn.softmax_cross_entropy_with_logits": [
-            "logits", "labels", "dim", "name"],
-        "tf.nn.sparse_softmax_cross_entropy_with_logits": [
-            "logits", "labels", "name"],
-        "tf.nn.sigmoid_cross_entropy_with_logits": [
-            "logits", "labels", "name"]
-    }
-
-    # Specially handled functions.
-    self.function_handle = {"tf.reverse": self._reverse_handler}
-
-  @staticmethod
-  def _reverse_handler(file_edit_recorder, node):
-    # TODO(aselle): Could check for a literal list of bools and try to convert
-    # them to indices.
-    comment = ("ERROR: tf.reverse has had its argument semantics changed\n"
-               "significantly the converter cannot detect this reliably, so you"
-               "need to inspect this usage manually.\n")
-    file_edit_recorder.add(comment,
-                           node.lineno,
-                           node.col_offset,
-                           "tf.reverse",
-                           "tf.reverse",
-                           error="tf.reverse requires manual check.")
+  For an example, see `TFAPIChangeSpec`.
+  """
 
 
-class FileEditTuple(collections.namedtuple(
-    "FileEditTuple", ["comment", "line", "start", "old", "new"])):
-  """Each edit that is recorded by a FileEditRecorder.
+class _FileEditTuple(collections.namedtuple(
+    "_FileEditTuple", ["comment", "line", "start", "old", "new"])):
+  """Each edit that is recorded by a _FileEditRecorder.
 
   Fields:
     comment: A description of the edit and why it was made.
@@ -204,7 +61,7 @@ class FileEditTuple(collections.namedtuple(
   __slots__ = ()
 
 
-class FileEditRecorder(object):
+class _FileEditRecorder(object):
   """Record changes that need to be done to the file."""
 
   def __init__(self, filename):
@@ -294,22 +151,23 @@ class FileEditRecorder(object):
     """
 
     self._line_to_edit[line].append(
-        FileEditTuple(comment, line, start, old, new))
+        _FileEditTuple(comment, line, start, old, new))
     if error:
       self._errors.append("%s:%d: %s" % (self._filename, line, error))
 
 
-class TensorFlowCallVisitor(ast.NodeVisitor):
-  """AST Visitor that finds TensorFlow Function calls.
+class _ASTCallVisitor(ast.NodeVisitor):
+  """AST Visitor that processes function calls.
 
-  Updates function calls from old API version to new API version.
+  Updates function calls from old API version to new API version using a given
+  change spec.
   """
 
-  def __init__(self, filename, lines):
+  def __init__(self, filename, lines, api_change_spec):
     self._filename = filename
-    self._file_edit = FileEditRecorder(filename)
+    self._file_edit = _FileEditRecorder(filename)
     self._lines = lines
-    self._api_change_spec = APIChangeSpec()
+    self._api_change_spec = api_change_spec
 
   def process(self, lines):
     return self._file_edit.process(lines)
@@ -417,7 +275,7 @@ class TensorFlowCallVisitor(ast.NodeVisitor):
     # Make sure the func is marked as being part of a call
     node.func.is_function_for_call = True
 
-    if full_name and full_name.startswith("tf."):
+    if full_name:
       # Call special handlers
       function_handles = self._api_change_spec.function_handle
       if full_name in function_handles:
@@ -457,19 +315,20 @@ class TensorFlowCallVisitor(ast.NodeVisitor):
 
         if argkey in renamed_keywords:
           argval_lineno, argval_col_offset = self._find_true_position(argval)
-          if (argval_lineno is not None and argval_col_offset is not None):
+          if argval_lineno is not None and argval_col_offset is not None:
             # TODO(aselle): We should scan backward to find the start of the
             # keyword key. Unfortunately ast does not give you the location of
             # keyword keys, so we are forced to infer it from the keyword arg
             # value.
             key_start = argval_col_offset - len(argkey) - 1
             key_end = key_start + len(argkey) + 1
-            if self._lines[argval_lineno - 1][key_start:key_end] == argkey + "=":
+            if (self._lines[argval_lineno - 1][key_start:key_end] ==
+                argkey + "="):
               self._file_edit.add("Renamed keyword argument from %r to %r" %
-                              (argkey, renamed_keywords[argkey]),
-                              argval_lineno,
-                              argval_col_offset - len(argkey) - 1,
-                              argkey + "=", renamed_keywords[argkey] + "=")
+                                  (argkey, renamed_keywords[argkey]),
+                                  argval_lineno,
+                                  argval_col_offset - len(argkey) - 1,
+                                  argkey + "=", renamed_keywords[argkey] + "=")
               continue
           self._file_edit.add(
               "Failed to rename keyword argument from %r to %r" %
@@ -488,7 +347,7 @@ class TensorFlowCallVisitor(ast.NodeVisitor):
       node: Node that is of type ast.Attribute
     """
     full_name = self._get_attribute_full_path(node)
-    if full_name and full_name.startswith("tf."):
+    if full_name:
       self._rename_functions(node, full_name)
     if full_name in self._api_change_spec.change_to_function:
       if not hasattr(node, "is_function_for_call"):
@@ -499,11 +358,14 @@ class TensorFlowCallVisitor(ast.NodeVisitor):
     ast.NodeVisitor.generic_visit(self, node)
 
 
-class TensorFlowCodeUpgrader(object):
-  """Class that handles upgrading a set of Python files to TensorFlow 1.0."""
+class ASTCodeUpgrader(object):
+  """Handles upgrading a set of Python files using a given API change spec."""
 
-  def __init__(self):
-    pass
+  def __init__(self, api_change_spec):
+    if not isinstance(api_change_spec, APIChangeSpec):
+      raise TypeError("Must pass APIChangeSpec to ASTCodeUpgrader, got %s" %
+                      type(api_change_spec))
+    self._api_change_spec = api_change_spec
 
   def process_file(self, in_filename, out_filename):
     """Process the given python file for incompatible changes.
@@ -554,7 +416,7 @@ class TensorFlowCodeUpgrader(object):
       text += "Failed to parse %r\n\n" % in_filename
       text += traceback.format_exc()
     if parsed_ast:
-      visitor = TensorFlowCallVisitor(in_filename, lines)
+      visitor = _ASTCallVisitor(in_filename, lines, self._api_change_spec)
       visitor.visit(parsed_ast)
       out_text, new_text, process_errors = visitor.process(lines)
       text += new_text
@@ -564,7 +426,8 @@ class TensorFlowCodeUpgrader(object):
     return 1, text, process_errors
   # pylint: enable=broad-except
 
-  def process_tree(self, root_directory, output_root_directory):
+  def process_tree(self, root_directory, output_root_directory,
+                   copy_other_files):
     """Processes upgrades on an entire tree of python files in place.
 
     Note that only Python files. If you have custom code in other languages,
@@ -572,7 +435,9 @@ class TensorFlowCodeUpgrader(object):
 
     Args:
       root_directory: Directory to walk and process.
-      output_root_directory: Directory to use as base
+      output_root_directory: Directory to use as base.
+      copy_other_files: Copy files that are not touched by this converter.
+
     Returns:
       A tuple of files processed, the report string ofr all files, and errors
     """
@@ -594,13 +459,21 @@ class TensorFlowCodeUpgrader(object):
     # Collect list of files to process (we do this to correctly handle if the
     # user puts the output directory in some sub directory of the input dir)
     files_to_process = []
+    files_to_copy = []
     for dir_name, _, file_list in os.walk(root_directory):
       py_files = [f for f in file_list if f.endswith(".py")]
+      copy_files = [f for f in file_list if not f.endswith(".py")]
       for filename in py_files:
         fullpath = os.path.join(dir_name, filename)
         fullpath_output = os.path.join(
             output_root_directory, os.path.relpath(fullpath, root_directory))
         files_to_process.append((fullpath, fullpath_output))
+      if copy_other_files:
+        for filename in copy_files:
+          fullpath = os.path.join(dir_name, filename)
+          fullpath_output = os.path.join(
+              output_root_directory, os.path.relpath(fullpath, root_directory))
+          files_to_copy.append((fullpath, fullpath_output))
 
     file_count = 0
     tree_errors = []
@@ -617,7 +490,183 @@ class TensorFlowCodeUpgrader(object):
       _, l_report, l_errors = self.process_file(input_path, output_path)
       tree_errors += l_errors
       report += l_report
+    for input_path, output_path in files_to_copy:
+      output_directory = os.path.dirname(output_path)
+      if not os.path.isdir(output_directory):
+        os.makedirs(output_directory)
+      shutil.copy(input_path, output_path)
     return file_count, report, tree_errors
+
+
+class TFAPIChangeSpec(APIChangeSpec):
+  """List of maps that describe what changed in the API."""
+
+  def __init__(self):
+    # Maps from a function name to a dictionary that describes how to
+    # map from an old argument keyword to the new argument keyword.
+    self.function_keyword_renames = {
+        "tf.batch_matmul": {
+            "adj_x": "adjoint_a",
+            "adj_y": "adjoint_b",
+        },
+        "tf.count_nonzero": {
+            "reduction_indices": "axis"
+        },
+        "tf.reduce_all": {
+            "reduction_indices": "axis"
+        },
+        "tf.reduce_any": {
+            "reduction_indices": "axis"
+        },
+        "tf.reduce_max": {
+            "reduction_indices": "axis"
+        },
+        "tf.reduce_mean": {
+            "reduction_indices": "axis"
+        },
+        "tf.reduce_min": {
+            "reduction_indices": "axis"
+        },
+        "tf.reduce_prod": {
+            "reduction_indices": "axis"
+        },
+        "tf.reduce_sum": {
+            "reduction_indices": "axis"
+        },
+        "tf.reduce_logsumexp": {
+            "reduction_indices": "axis"
+        },
+        "tf.expand_dims": {
+            "dim": "axis"
+        },
+        "tf.argmax": {
+            "dimension": "axis"
+        },
+        "tf.argmin": {
+            "dimension": "axis"
+        },
+        "tf.reduce_join": {
+            "reduction_indices": "axis"
+        },
+        "tf.sparse_concat": {
+            "concat_dim": "axis"
+        },
+        "tf.sparse_split": {
+            "split_dim": "axis"
+        },
+        "tf.sparse_reduce_sum": {
+            "reduction_axes": "axis"
+        },
+        "tf.reverse_sequence": {
+            "seq_dim": "seq_axis",
+            "batch_dim": "batch_axis"
+        },
+        "tf.sparse_reduce_sum_sparse": {
+            "reduction_axes": "axis"
+        },
+        "tf.squeeze": {
+            "squeeze_dims": "axis"
+        },
+        "tf.split": {
+            "split_dim": "axis",
+            "num_split": "num_or_size_splits"
+        },
+        "tf.concat": {
+            "concat_dim": "axis"
+        },
+    }
+
+    # Mapping from function to the new name of the function
+    self.function_renames = {
+        "tf.inv": "tf.reciprocal",
+        "tf.contrib.deprecated.scalar_summary": "tf.summary.scalar",
+        "tf.contrib.deprecated.histogram_summary": "tf.summary.histogram",
+        "tf.listdiff": "tf.setdiff1d",
+        "tf.list_diff": "tf.setdiff1d",
+        "tf.mul": "tf.multiply",
+        "tf.neg": "tf.negative",
+        "tf.sub": "tf.subtract",
+        "tf.train.SummaryWriter": "tf.summary.FileWriter",
+        "tf.scalar_summary": "tf.summary.scalar",
+        "tf.histogram_summary": "tf.summary.histogram",
+        "tf.audio_summary": "tf.summary.audio",
+        "tf.image_summary": "tf.summary.image",
+        "tf.merge_summary": "tf.summary.merge",
+        "tf.merge_all_summaries": "tf.summary.merge_all",
+        "tf.image.per_image_whitening": "tf.image.per_image_standardization",
+        "tf.all_variables": "tf.global_variables",
+        "tf.VARIABLES": "tf.GLOBAL_VARIABLES",
+        "tf.initialize_all_variables": "tf.global_variables_initializer",
+        "tf.initialize_variables": "tf.variables_initializer",
+        "tf.initialize_local_variables": "tf.local_variables_initializer",
+        "tf.batch_matrix_diag": "tf.matrix_diag",
+        "tf.batch_band_part": "tf.band_part",
+        "tf.batch_set_diag": "tf.set_diag",
+        "tf.batch_matrix_transpose": "tf.matrix_transpose",
+        "tf.batch_matrix_determinant": "tf.matrix_determinant",
+        "tf.batch_matrix_inverse": "tf.matrix_inverse",
+        "tf.batch_cholesky": "tf.cholesky",
+        "tf.batch_cholesky_solve": "tf.cholesky_solve",
+        "tf.batch_matrix_solve": "tf.matrix_solve",
+        "tf.batch_matrix_triangular_solve": "tf.matrix_triangular_solve",
+        "tf.batch_matrix_solve_ls": "tf.matrix_solve_ls",
+        "tf.batch_self_adjoint_eig": "tf.self_adjoint_eig",
+        "tf.batch_self_adjoint_eigvals": "tf.self_adjoint_eigvals",
+        "tf.batch_svd": "tf.svd",
+        "tf.batch_fft": "tf.fft",
+        "tf.batch_ifft": "tf.ifft",
+        "tf.batch_fft2d": "tf.fft2d",
+        "tf.batch_ifft2d": "tf.ifft2d",
+        "tf.batch_fft3d": "tf.fft3d",
+        "tf.batch_ifft3d": "tf.ifft3d",
+        "tf.select": "tf.where",
+        "tf.complex_abs": "tf.abs",
+        "tf.batch_matmul": "tf.matmul",
+        "tf.pack": "tf.stack",
+        "tf.unpack": "tf.unstack",
+        "tf.op_scope": "tf.name_scope",
+    }
+
+    self.change_to_function = {
+        "tf.ones_initializer",
+        "tf.zeros_initializer",
+    }
+
+    # Functions that were reordered should be changed to the new keyword args
+    # for safety, if positional arguments are used. If you have reversed the
+    # positional arguments yourself, this could do the wrong thing.
+    self.function_reorders = {
+        "tf.split": ["axis", "num_or_size_splits", "value", "name"],
+        "tf.sparse_split": ["axis", "num_or_size_splits", "value", "name"],
+        "tf.concat": ["concat_dim", "values", "name"],
+        "tf.svd": ["tensor", "compute_uv", "full_matrices", "name"],
+        "tf.nn.softmax_cross_entropy_with_logits": [
+            "logits", "labels", "dim", "name"],
+        "tf.nn.sparse_softmax_cross_entropy_with_logits": [
+            "logits", "labels", "name"],
+        "tf.nn.sigmoid_cross_entropy_with_logits": [
+            "logits", "labels", "name"],
+        "tf.op_scope": ["values", "name", "default_name"],
+    }
+
+    # Specially handled functions.
+    self.function_handle = {
+        "tf.reverse": self._reverse_handler
+    }
+
+  @staticmethod
+  def _reverse_handler(file_edit_recorder, node):
+    # TODO(aselle): Could check for a literal list of bools and try to convert
+    # them to indices.
+    comment = ("ERROR: tf.reverse has had its argument semantics changed\n"
+               "significantly the converter cannot detect this reliably, so you"
+               "need to inspect this usage manually.\n")
+    file_edit_recorder.add(comment,
+                           node.lineno,
+                           node.col_offset,
+                           "tf.reverse",
+                           "tf.reverse",
+                           error="tf.reverse requires manual check.")
 
 
 if __name__ == "__main__":
@@ -649,6 +698,13 @@ Simple usage:
       help="If converting a whole tree of files, the output "
       "directory (relative or absolute).")
   parser.add_argument(
+      "--copyotherfiles",
+      dest="copy_other_files",
+      help=("If converting a whole tree of files, whether to "
+            "copy the other files."),
+      type=bool,
+      default=False)
+  parser.add_argument(
       "--reportfile",
       dest="report_filename",
       help=("The name of the file where the report log is "
@@ -657,7 +713,7 @@ Simple usage:
       default="report.txt")
   args = parser.parse_args()
 
-  upgrade = TensorFlowCodeUpgrader()
+  upgrade = ASTCodeUpgrader(TFAPIChangeSpec())
   report_text = None
   report_filename = args.report_filename
   files_processed = 0
@@ -667,7 +723,7 @@ Simple usage:
     files_processed = 1
   elif args.input_tree:
     files_processed, report_text, errors = upgrade.process_tree(
-        args.input_tree, args.output_tree)
+        args.input_tree, args.output_tree, args.copy_other_files)
   else:
     parser.print_help()
   if report_text:

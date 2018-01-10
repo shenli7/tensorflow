@@ -27,6 +27,7 @@ limitations under the License.
 #include "tensorflow/compiler/xla/service/versioned_computation_handle.h"
 #include "tensorflow/compiler/xla/statusor.h"
 #include "tensorflow/compiler/xla/types.h"
+#include "tensorflow/compiler/xla/xla.pb.h"
 #include "tensorflow/compiler/xla/xla_data.pb.h"
 #include "tensorflow/core/platform/macros.h"
 #include "tensorflow/core/platform/mutex.h"
@@ -69,7 +70,7 @@ class UserComputation {
 
   // Enqueues a pad instruction onto this user computation.
   StatusOr<ComputationDataHandle> AddPadInstruction(
-      const PadRequest& parameter_request);
+      const PadRequest& pad_request);
 
   // Enqueues a tracing instruction onto this user computation.
   // Returns an error status if the operand cannot be resolved.
@@ -84,6 +85,18 @@ class UserComputation {
   StatusOr<ComputationDataHandle> AddUnaryInstruction(
       const UnaryOpRequest& unary_request);
 
+  // Enqueues a batch norm training instruction onto this user computation.
+  StatusOr<ComputationDataHandle> AddBatchNormTrainingInstruction(
+      const BatchNormTrainingRequest& batch_norm_training_request);
+
+  // Enqueues a batch norm inference instruction onto this user computation.
+  StatusOr<ComputationDataHandle> AddBatchNormInferenceInstruction(
+      const BatchNormInferenceRequest& batch_norm_inference_request);
+
+  // Enqueues a batch norm grad instruction onto this user computation.
+  StatusOr<ComputationDataHandle> AddBatchNormGradInstruction(
+      const BatchNormGradRequest& batch_norm_grad_request);
+
   // Enqueues a binary instruction onto this user computation.
   // Returns an error status if the operand indices are out of bounds.
   StatusOr<ComputationDataHandle> AddBinaryInstruction(
@@ -92,7 +105,7 @@ class UserComputation {
   // Enqueues a ternary instruction onto this user computation.
   // Returns an error status if the operand indices are out of bounds.
   StatusOr<ComputationDataHandle> AddTernaryInstruction(
-      const TernaryOpRequest& request);
+      const TernaryOpRequest& ternary_request);
 
   // Enqueues a variadic instruction onto this user computation.
   // Returns an error status if the operand indices are out of bounds.
@@ -112,9 +125,17 @@ class UserComputation {
       const MapRequest& map_request,
       const UserComputation& to_apply_computation);
 
+  // Enqueues a reduce-precision instruction onto this user computation.
+  StatusOr<ComputationDataHandle> AddReducePrecisionInstruction(
+      const ReducePrecisionRequest& reduce_precision_request);
+
   // Enqueues a convolution instruction onto this user computation.
   StatusOr<ComputationDataHandle> AddConvolveInstruction(
       const ConvolveRequest& convolve_request);
+
+  // Enqueues an FFT instruction onto this user computation.
+  StatusOr<ComputationDataHandle> AddFftInstruction(
+      const FftRequest& fft_request);
 
   // Enqueues a cross replica sum instruction onto this user computation.
   StatusOr<ComputationDataHandle> AddCrossReplicaSumInstruction(
@@ -136,6 +157,10 @@ class UserComputation {
   StatusOr<ComputationDataHandle> AddCustomCallInstruction(
       const CustomCallRequest& custom_call_request);
 
+  // Enqueues a dot instruction onto this user computation.
+  StatusOr<ComputationDataHandle> AddDotInstruction(
+      const DotRequest& dot_request);
+
   // Enqueues a broadcast instruction onto this user computation.
   StatusOr<ComputationDataHandle> AddBroadcastInstruction(
       const BroadcastRequest& broadcast_request);
@@ -143,6 +168,10 @@ class UserComputation {
   // Enqueues a reshape instruction onto this user computation.
   StatusOr<ComputationDataHandle> AddReshapeInstruction(
       const ReshapeRequest& reshape_request);
+
+  // Enqueues a transpose instruction onto this user computation.
+  StatusOr<ComputationDataHandle> AddTransposeInstruction(
+      const TransposeRequest& transpose_request);
 
   // Enqueues a slice instruction onto this user computation.
   StatusOr<ComputationDataHandle> AddSliceInstruction(
@@ -158,26 +187,30 @@ class UserComputation {
 
   // Enqueues a concatenate instruction onto this user computation.
   StatusOr<ComputationDataHandle> AddConcatenateInstruction(
-      const ConcatenateRequest& slice_request);
+      const ConcatenateRequest& concatenate_request);
 
   // Enqueues a convert instruction onto this user computation.
   StatusOr<ComputationDataHandle> AddConvertInstruction(
       const ConvertRequest& convert_request);
 
+  // Enqueues a bitcast element instruction onto this user computation.
+  StatusOr<ComputationDataHandle> AddBitcastConvertInstruction(
+      const ConvertRequest& convert_request);
+
   // Enqueues a reduce instruction onto this user computation.
   StatusOr<ComputationDataHandle> AddReduceInstruction(
       const ReduceRequest& reduce_request,
-      const UserComputation& reduction_computation);
+      const UserComputation& to_apply_computation);
 
   // Enqueues a windowed reduce instruction onto this user computation.
   StatusOr<ComputationDataHandle> AddReduceWindowInstruction(
       const ReduceWindowRequest& reduce_window_request,
-      const UserComputation& reduction_computation);
+      const UserComputation& to_apply_computation);
 
   // Enqueues a select-and-scatter instruction onto this user
   // computation.
   StatusOr<ComputationDataHandle> AddSelectAndScatterInstruction(
-      const SelectAndScatterRequest& scatter_to_selected_window_element_request,
+      const SelectAndScatterRequest& select_and_scatter_request,
       const UserComputation& select_computation,
       const UserComputation& scatter_computation);
 
@@ -190,6 +223,12 @@ class UserComputation {
       const WhileRequest& while_request,
       const UserComputation& condition_computation,
       const UserComputation& body_computation);
+
+  // Enqueues a conditional instruction on this user computation.
+  StatusOr<ComputationDataHandle> AddConditionalInstruction(
+      const ConditionalRequest& conditional_request,
+      const UserComputation& true_computation,
+      const UserComputation& false_computation);
 
   // Enqueues a Send instruction onto this user computation.
   Status AddSendInstruction(const SendRequest& send_request);
@@ -229,27 +268,37 @@ class UserComputation {
   StatusOr<std::shared_ptr<const ProgramShape>> ComputeProgramShape(
       VersionedComputationHandle::Version version) const;
 
-  // Returns true if the given data handle does not depend on any
-  // parameters. That is, the value can be computed at compile time.
-  StatusOr<bool> IsConstant(const ComputationDataHandle& handle);
+  // Returns true if the given data handle does not depend on any parameter with
+  // index higher then num_parameters. That is, the value can be computed at
+  // compile time if we know the first num_parameters arguments.
+  StatusOr<bool> IsConstant(const ComputationDataHandle& handle,
+                            int64 num_parameters);
 
   // Returns the output shape of the operation indicated by the given handle.
   StatusOr<Shape> GetShape(const ComputationDataHandle& handle);
+
+  // Sets metadata on the Hlo instruction referenced by the given handle.
+  Status SetOpMetadata(const ComputationDataHandle& handle,
+                       const OpMetadata& metadata);
+
+  // Sets the device assignment on the Hlo instruction referenced by 'handle'.
+  Status SetOpSharding(const ComputationDataHandle& handle,
+                       const OpSharding& sharding);
 
   // Builds a HLO computation from the UserComputation. The parameter "resolver"
   // is a function which returns a pointer to the HloComputation corresponding
   // to the given ComputationHandle at the given version. The resolver is used
   // for operations, such as map, which call other computations and need a
   // pointer to the called HloComputation to construct the respective HLO
-  // instructions. If include_unused_computation is true, then all parameter
-  // instructions are lowered into HloInstructions even if the parameter is
-  // unused (the root of the computation is unreachable from the parameter).
+  // instructions. If include_unreachable_instructions is true, then
+  // instructions which are not reachable from the root are lowered into
+  // HloInstructions.
   using HloComputationResolver =
       std::function<HloComputation*(const VersionedComputationHandle& handle)>;
   StatusOr<std::unique_ptr<HloComputation>> BuildHloComputation(
       VersionedComputationHandle::Version version,
-      HloComputationResolver hlo_resolver,
-      bool include_unused_parameters = true) const;
+      HloComputationResolver hlo_resolver, const DebugOptions& debug_options,
+      bool include_unreachable_instructions = true) const;
 
   // Return a vector containing the embedded computations used by this
   // UserComputation. Only embedded computations which are called directly by
@@ -272,6 +321,15 @@ class UserComputation {
   SessionComputation CloneSessionComputation(
       VersionedComputationHandle::Version version) const;
 
+  // Warning: typically we don't want to look up computation data handles until
+  // the computation is finished being built, for consistency purposes. We
+  // expose this routine for error reporting purposes so that we can provide
+  // more meaningful error messages from the XLA service layer.
+  //
+  // Returns the operation request that the handle comes from.
+  StatusOr<const OperationRequest*> LookUpRequestForErrorReporting(
+      const ComputationDataHandle& handle) const;
+
  private:
   // Warning: dangerous mutating operation that doesn't respect versioning.
   // This is only used at initialization time when constructing from a
@@ -285,13 +343,8 @@ class UserComputation {
       const std::map<int64, ComputationHandle>& old_to_new)
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
-  // Returns the OperationRequestion corresponding to the root (result) of the
-  // computation.
-  const OperationRequest& GetRoot(VersionedComputationHandle::Version version)
-      const EXCLUSIVE_LOCKS_REQUIRED(mutex_);
-
-  // Returns the OperationRequest corresponding to the given handle value.
-  StatusOr<const OperationRequest*> LookupRequest(
+  // Returns the OperationRequest corresponding to the given handle.
+  StatusOr<const OperationRequest*> LookUpRequest(
       const ComputationDataHandle& handle) const
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
@@ -303,6 +356,9 @@ class UserComputation {
   // contiguous starting from zero. Returns appropriate error status if not.
   Status CheckParametersAreContiguous(
       VersionedComputationHandle::Version version) const
+      EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+
+  VersionedComputationHandle GetVersionedHandleInternal() const
       EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   // Name of the computation.

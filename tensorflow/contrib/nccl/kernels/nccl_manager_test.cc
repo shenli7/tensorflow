@@ -30,6 +30,8 @@ namespace tensorflow {
 static std::vector<BaseGPUDevice*> GetGPUDevices() {
   std::vector<Device*> devices;
   SessionOptions session_options;
+  session_options.config.mutable_gpu_options()
+      ->set_per_process_gpu_memory_fraction(0.1);
   session_options.env = Env::Default();
   Status s = DeviceFactory::GetFactory(DEVICE_GPU)
                  ->AddDevices(session_options, "", &devices);
@@ -173,7 +175,7 @@ class NcclManagerTest : public ::testing::Test {
       auto out_gpu_mem = AsDeviceMemory(out_gpu.flat<float>().data());
       stream->ThenMemcpy(out_cpu.flat<float>().data(), out_gpu_mem,
                          out_cpu.TotalBytes());
-      stream->BlockHostUntilDone();
+      SE_ASSERT_OK(stream->BlockHostUntilDone());
       test::ExpectTensorEqual<float>(test_case->expected, out_cpu);
     }
   }
@@ -193,9 +195,9 @@ TEST_F(NcclManagerTest, BasicSumReduction) {
       auto* event_mgr = device->tensorflow_gpu_device_info()->event_mgr;
       auto* stream = device->tensorflow_gpu_device_info()->stream;
       NcclManager::instance()->AddToAllReduce(
-          num_ranks, "allreduce", reduction_op, device->executor(), event_mgr,
-          stream, &test_case->ins[device_num], &test_case->outs[device_num],
-          CreateDoneCallback(test_case.get()));
+          num_ranks, "allreduce", reduction_op, device->executor(),
+          device->gpu_id(), event_mgr, stream, &test_case->ins[device_num],
+          &test_case->outs[device_num], CreateDoneCallback(test_case.get()));
     }
 
     LOG(ERROR) << "Verifying results";
@@ -234,7 +236,7 @@ TEST_F(NcclManagerTest, MultipleCallers) {
     for (int i = 0; i < num_ranks; ++i) {
       auto* device = devices->at(i % devices->size());
       auto* stream = device->tensorflow_gpu_device_info()->stream;
-      stream->BlockHostUntilDone();
+      SE_ASSERT_OK(stream->BlockHostUntilDone());
     }
 
     std::random_shuffle(case_and_device_num.begin(), case_and_device_num.end());
@@ -259,8 +261,9 @@ TEST_F(NcclManagerTest, MultipleCallers) {
         TestCase* test_case = test_cases[test_num].get();
         NcclManager::instance()->AddToAllReduce(
             num_ranks, strings::StrCat("allreduce", test_num), ncclSum,
-            device->executor(), event_mgr, stream, &test_case->ins[device_num],
-            &test_case->outs[device_num], CreateDoneCallback(test_case));
+            device->executor(), device->gpu_id(), event_mgr, stream,
+            &test_case->ins[device_num], &test_case->outs[device_num],
+            CreateDoneCallback(test_case));
       };
       pool->Schedule(fn);
     }

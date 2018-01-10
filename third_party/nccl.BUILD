@@ -43,6 +43,24 @@ cc_library(
         "-Iexternal/nccl_archive/src",
         "-O3",
     ] + cuda_default_copts(),
+    linkopts = select({
+        "@org_tensorflow//tensorflow:android": [
+            "-pie",
+        ],
+        "@org_tensorflow//tensorflow:darwin": [
+            "-Wl,-framework",
+            "-Wl,CoreFoundation",
+            "-Wl,-framework",
+            "-Wl,Security",
+        ],
+        "@org_tensorflow//tensorflow:ios": [],
+        "@org_tensorflow//tensorflow:windows": [
+            "-DEFAULTLIB:ws2_32.lib",
+        ],
+        "//conditions:default": [
+            "-lrt",
+        ],
+    }),
     visibility = ["//visibility:public"],
     deps = ["@local_config_cuda//cuda:cuda_headers"],
 )

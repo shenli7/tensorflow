@@ -181,7 +181,7 @@ def _compute_numeric_jacobian(x, x_shape, x_data, y, y_shape, delta,
 
 
 def _compute_dx_and_dy(x, y, y_shape):
-  """Returns a node to compute gradient of x wrt y."""
+  """Returns a node to compute gradient of y wrt x."""
   # We make up a dy so that we can compute the gradients. We don't really use
   # the value of dy -- we will always feed it. We need to add an identity node
   # so that we can always feed it properly. Otherwise, for the Add operation,
@@ -189,7 +189,7 @@ def _compute_dx_and_dy(x, y, y_shape):
   with x.graph.as_default():
     dy_orig = constant_op.constant(1.0, shape=y_shape, dtype=y.dtype)
     dy = array_ops.identity(dy_orig)
-  # We compute the gradients for x wrt. y
+  # We compute the gradients for y wrt. x
   grads = gradients.gradients(y, x, dy)
   assert len(grads) == 1
   return grads[0], dy_orig
@@ -218,13 +218,9 @@ def _compute_gradient(x,
         x_shape, i_shape)
     x_data = x_init_value
   else:
-    if t == dtypes.float16:
-      dtype = np.float16
-    elif t == dtypes.float32:
-      dtype = np.float32
-    else:
-      dtype = np.float64
-    x_data = np.asfarray(np.random.random_sample(x_shape), dtype=dtype)
+    x_data = np.random.random_sample(x_shape).astype(t.as_numpy_dtype)
+    if t.is_complex:
+      x_data.imag = np.random.random_sample(x_shape)
 
   jacob_t = _compute_theoretical_jacobian(
       x, x_shape, x_data, dy, y_shape, dx, extra_feed_dict=extra_feed_dict)
@@ -352,7 +348,6 @@ def compute_gradient_error(x,
       as the initial value.
     delta: (optional) the amount of perturbation.
     init_targets: list of targets to run to initialize model params.
-      TODO(mrry): Remove this argument.
     extra_feed_dict: dict that allows fixing specified tensor values
       during the Jacobian calculation.
 

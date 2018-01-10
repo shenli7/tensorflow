@@ -19,10 +19,7 @@ from __future__ import division
 from __future__ import print_function
 
 import numpy as np
-from tensorflow.contrib.distributions.python.ops import bijector
-from tensorflow.contrib.distributions.python.ops import distribution
-from tensorflow.contrib.distributions.python.ops import distribution_util
-from tensorflow.contrib.distributions.python.ops import transformed_distribution
+from tensorflow.contrib.distributions.python.ops import bijectors
 from tensorflow.python.framework import dtypes
 from tensorflow.python.framework import ops
 from tensorflow.python.ops import array_ops
@@ -31,6 +28,9 @@ from tensorflow.python.ops import control_flow_ops
 from tensorflow.python.ops import math_ops
 from tensorflow.python.ops import nn_ops
 from tensorflow.python.ops import random_ops
+from tensorflow.python.ops.distributions import distribution
+from tensorflow.python.ops.distributions import transformed_distribution
+from tensorflow.python.ops.distributions import util as distribution_util
 
 
 class ExpRelaxedOneHotCategorical(distribution.Distribution):
@@ -59,8 +59,8 @@ class ExpRelaxedOneHotCategorical(distribution.Distribution):
 
   #### Examples
 
-  Creates a continuous distribution, whoe exp approximates a 3-class one-hot
-  categorical distiribution. The 2nd class is the most likely to be the
+  Creates a continuous distribution, whose exp approximates a 3-class one-hot
+  categorical distribution. The 2nd class is the most likely to be the
   largest component in samples drawn from this distribution. If those samples
   are followed by a `tf.exp` op, then they are distributed as a relaxed onehot
   categorical.
@@ -76,7 +76,7 @@ class ExpRelaxedOneHotCategorical(distribution.Distribution):
   ```
 
   Creates a continuous distribution, whose exp approximates a 3-class one-hot
-  categorical distiribution. The 2nd class is the most likely to be the
+  categorical distribution. The 2nd class is the most likely to be the
   largest component in samples drawn from this distribution.
 
   ```python
@@ -90,7 +90,7 @@ class ExpRelaxedOneHotCategorical(distribution.Distribution):
   ```
 
   Creates a continuous distribution, whose exp approximates a 3-class one-hot
-  categorical distiribution. Because the temperature is very low, samples from
+  categorical distribution. Because the temperature is very low, samples from
   this distribution are almost discrete, with one component almost 0 and the
   others very negative. The 2nd class is the most likely to be the largest
   component in samples drawn from this distribution.
@@ -106,7 +106,7 @@ class ExpRelaxedOneHotCategorical(distribution.Distribution):
   ```
 
   Creates a continuous distribution, whose exp approximates a 3-class one-hot
-  categorical distiribution. Because the temperature is very high, samples from
+  categorical distribution. Because the temperature is very high, samples from
   this distribution are usually close to the (-log(3), -log(3), -log(3)) vector.
   The 2nd class is still the most likely to be the largest component
   in samples drawn from this distribution.
@@ -130,7 +130,7 @@ class ExpRelaxedOneHotCategorical(distribution.Distribution):
       temperature,
       logits=None,
       probs=None,
-      dtype=dtypes.float32,
+      dtype=None,
       validate_args=False,
       allow_nan_stats=True,
       name="ExpRelaxedOneHotCategorical"):
@@ -150,7 +150,8 @@ class ExpRelaxedOneHotCategorical(distribution.Distribution):
         `N - 1` dimensions index into a batch of independent distributions and
         the last dimension represents a vector of probabilities for each
         class. Only one of `logits` or `probs` should be passed in.
-      dtype: The type of the event samples (default: int32).
+      dtype: The type of the event samples (default: inferred from
+        logits/probs).
       validate_args: Python `bool`, default `False`. When `True` distribution
         parameters are checked for validity despite possibly degrading runtime
         performance. When `False` invalid inputs may silently render incorrect
@@ -162,15 +163,22 @@ class ExpRelaxedOneHotCategorical(distribution.Distribution):
       name: Python `str` name prefixed to Ops created by this class.
     """
     parameters = locals()
-    with ops.name_scope(name, values=[logits, probs, temperature]) as ns:
+    with ops.name_scope(name, values=[logits, probs, temperature]):
+
+      self._logits, self._probs = distribution_util.get_logits_and_probs(
+          name=name, logits=logits, probs=probs, validate_args=validate_args,
+          multidimensional=True)
+
+      if dtype is None:
+        dtype = self._logits.dtype
+        if not validate_args:
+          temperature = math_ops.cast(temperature, dtype)
+
       with ops.control_dependencies([check_ops.assert_positive(temperature)]
                                     if validate_args else []):
         self._temperature = array_ops.identity(temperature, name="temperature")
         self._temperature_2d = array_ops.reshape(temperature, [-1, 1],
                                                  name="temperature_2d")
-      self._logits, self._probs = distribution_util.get_logits_and_probs(
-          name=name, logits=logits, probs=probs, validate_args=validate_args,
-          multidimensional=True)
 
       logits_shape_static = self._logits.get_shape().with_rank_at_least(1)
       if logits_shape_static.ndims is not None:
@@ -187,7 +195,6 @@ class ExpRelaxedOneHotCategorical(distribution.Distribution):
 
     super(ExpRelaxedOneHotCategorical, self).__init__(
         dtype=dtype,
-        is_continuous=True,
         reparameterization_type=distribution.FULLY_REPARAMETERIZED,
         validate_args=validate_args,
         allow_nan_stats=allow_nan_stats,
@@ -195,7 +202,7 @@ class ExpRelaxedOneHotCategorical(distribution.Distribution):
         graph_parents=[self._logits,
                        self._probs,
                        self._temperature],
-        name=ns)
+        name=name)
 
   @property
   def event_size(self):
@@ -231,7 +238,7 @@ class ExpRelaxedOneHotCategorical(distribution.Distribution):
 
   def _sample_n(self, n, seed=None):
     sample_shape = array_ops.concat([[n], array_ops.shape(self.logits)], 0)
-    logits = self.logits * array_ops.ones(sample_shape)
+    logits = self.logits * array_ops.ones(sample_shape, dtype=self.dtype)
     logits_2d = array_ops.reshape(logits, [-1, self.event_size])
     # Uniform variates must be sampled from the open-interval `(0, 1)` rather
     # than `[0, 1)`. To do so, we use `np.finfo(self.dtype.as_numpy_dtype).tiny`
@@ -314,7 +321,7 @@ class RelaxedOneHotCategorical(
   #### Examples
 
   Creates a continuous distribution, which approximates a 3-class one-hot
-  categorical distiribution. The 2nd class is the most likely to be the
+  categorical distribution. The 2nd class is the most likely to be the
   largest component in samples drawn from this distribution.
 
   ```python
@@ -324,7 +331,7 @@ class RelaxedOneHotCategorical(
   ```
 
   Creates a continuous distribution, which approximates a 3-class one-hot
-  categorical distiribution. The 2nd class is the most likely to be the
+  categorical distribution. The 2nd class is the most likely to be the
   largest component in samples drawn from this distribution.
 
   ```python
@@ -334,7 +341,7 @@ class RelaxedOneHotCategorical(
   ```
 
   Creates a continuous distribution, which approximates a 3-class one-hot
-  categorical distiribution. Because the temperature is very low, samples from
+  categorical distribution. Because the temperature is very low, samples from
   this distribution are almost discrete, with one component almost 1 and the
   others nearly 0. The 2nd class is the most likely to be the largest component
   in samples drawn from this distribution.
@@ -346,7 +353,7 @@ class RelaxedOneHotCategorical(
   ```
 
   Creates a continuous distribution, which approximates a 3-class one-hot
-  categorical distiribution. Because the temperature is very high, samples from
+  categorical distribution. Because the temperature is very high, samples from
   this distribution are usually close to the (1/3, 1/3, 1/3) vector. The 2nd
   class is still the most likely to be the largest component
   in samples drawn from this distribution.
@@ -369,7 +376,7 @@ class RelaxedOneHotCategorical(
       temperature,
       logits=None,
       probs=None,
-      dtype=dtypes.float32,
+      dtype=None,
       validate_args=False,
       allow_nan_stats=True,
       name="RelaxedOneHotCategorical"):
@@ -389,7 +396,8 @@ class RelaxedOneHotCategorical(
         dimensions index into a batch of independent distributions and the last
         dimension represents a vector of probabilities for each class. Only one
         of `logits` or `probs` should be passed in.
-      dtype: The type of the event samples (default: int32).
+      dtype: The type of the event samples (default: inferred from
+        logits/probs).
       validate_args: Unused in this distribution.
       allow_nan_stats: Python `bool`, default `True`. If `False`, raise an
         exception if a statistic (e.g. mean/mode/etc...) is undefined for any
@@ -404,5 +412,5 @@ class RelaxedOneHotCategorical(
                                        validate_args=validate_args,
                                        allow_nan_stats=allow_nan_stats)
     super(RelaxedOneHotCategorical, self).__init__(dist,
-                                                   bijector.Exp(event_ndims=1),
+                                                   bijectors.Exp(event_ndims=1),
                                                    name=name)
